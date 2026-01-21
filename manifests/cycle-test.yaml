@@ -1,0 +1,53 @@
+apiVersion: k8-deploymentgroups.io/v1alpha1
+kind: DeploymentGroup
+metadata:
+  name: cyclical-app
+  namespace: default
+spec:
+  items:
+  - name: service-a
+    targetReplicas: 1
+    dependsOn:
+    - service-b
+  - name: service-b
+    targetReplicas: 1
+    dependsOn:
+    - service-a
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-a
+  namespace: default
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: service-a
+  template:
+    metadata:
+      labels:
+        app: service-a
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-b
+  namespace: default
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: service-b
+  template:
+    metadata:
+      labels:
+        app: service-b
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine

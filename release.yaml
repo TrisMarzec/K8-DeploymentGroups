@@ -1,0 +1,192 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: deploymentgroups.k8-deploymentgroups.io
+spec:
+  group: k8-deploymentgroups.io
+  names:
+    kind: DeploymentGroup
+    listKind: DeploymentGroupList
+    plural: deploymentgroups
+    singular: deploymentgroup
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    served: true
+    storage: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          apiVersion:
+            type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+          spec:
+            type: object
+            properties:
+              items:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name:
+                      description: Name of the Deployment (must be in the same namespace as the DeploymentGroup)
+                      type: string
+                    targetReplicas:
+                      description: TargetReplicas specifies the desired replicas when the dependency is met.
+                      type: integer
+                      format: int32
+                    dependsOn:
+                      description: DependsOn is a list of names of other DeploymentItems in this group that must be Ready first
+                      type: array
+                      items:
+                        type: string
+                  required:
+                  - name
+            required:
+            - items
+          status:
+            type: object
+            properties:
+              conditions:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    lastTransitionTime:
+                      type: string
+                      format: date-time
+                    message:
+                      type: string
+                    reason:
+                      type: string
+                    status:
+                      type: string
+                    type:
+                      type: string
+              readyItems:
+                type: array
+                items:
+                  type: string
+    subresources:
+      status: {}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: deploymentgroup-controller-manager
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: deploymentgroup-manager-role
+rules:
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments/status
+  verbs:
+  - get
+- apiGroups:
+  - k8-deploymentgroups.io
+  resources:
+  - deploymentgroups
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - k8-deploymentgroups.io
+  resources:
+  - deploymentgroups/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - k8-deploymentgroups.io
+  resources:
+  - deploymentgroups/status
+  verbs:
+  - get
+  - patch
+  - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: deploymentgroup-manager-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: deploymentgroup-manager-role
+subjects:
+- kind: ServiceAccount
+  name: deploymentgroup-controller-manager
+  namespace: default
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: deploymentgroup-controller-manager
+  namespace: default
+  labels:
+    control-plane: controller-manager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+  template:
+    metadata:
+      labels:
+        control-plane: controller-manager
+    spec:
+      serviceAccountName: deploymentgroup-controller-manager
+      securityContext:
+        runAsNonRoot: true
+      containers:
+      - command:
+        - /manager
+        args:
+        - --leader-elect
+        image: controller:latest # Placeholder image name
+        name: manager
+        securityContext:
+          allowPrivilegeEscalation: false
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 500m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
+      terminationGracePeriodSeconds: 10

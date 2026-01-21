@@ -1,0 +1,93 @@
+apiVersion: k8-deploymentgroups.io/v1alpha1
+kind: DeploymentGroup
+metadata:
+  name: sample-app-startup
+  namespace: default
+spec:
+  items:
+  - name: redis
+    targetReplicas: 1
+  - name: backend
+    targetReplicas: 3
+    dependsOn:
+    - redis
+  - name: frontend
+    targetReplicas: 2
+    dependsOn:
+    - backend
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: default
+spec:
+  replicas: 0 # Initial state controlled by DeploymentGroup
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:alpine
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 5
+          periodSeconds: 2
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: default
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+      - name: busybox
+        image: busybox
+        command: ["sh", "-c", "echo Backend started; while true; do sleep 3600; done"]
+        readinessProbe:
+          exec:
+            command:
+            - cat
+            - /tmp/healthy
+          initialDelaySeconds: 2
+          periodSeconds: 2
+        lifecycle:
+          postStart:
+            exec:
+              command: ["/bin/sh", "-c", "touch /tmp/healthy"]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: default
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
