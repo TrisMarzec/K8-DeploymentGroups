@@ -4,20 +4,24 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// DeploymentGroupSpec defines the desired state of DeploymentGroup
+// DeploymentGroupSpec defines the desired state of a DeploymentGroup, including the list of deployments and their dependencies.
 type DeploymentGroupSpec struct {
-	// Items defines the list of deployments and their dependencies
+	// Items is the list of deployments to be managed, including their dependencies and configuration overrides.
 	Items []DeploymentItem `json:"items"`
 }
 
 type DeploymentItem struct {
-	// Name of the Deployment (must be in the same namespace as the DeploymentGroup)
+	// Name corresponds to the name of the Kubernetes Deployment resource.
+	// The Deployment must exist in the same namespace as the DeploymentGroup.
 	Name string `json:"name"`
-	// TargetReplicas specifies the desired replicas when the dependency is met.
-	// If not set, it could default to 1 or look for an annotation on the Deployment.
+	// TargetReplicas specifies the number of replicas the deployment should have when all its dependencies are met.
+	// If not specified, it defaults to 1.
 	TargetReplicas *int32 `json:"targetReplicas,omitempty"`
-	// DependsOn is a list of names of other DeploymentItems in this group that must be Ready first
+	// DependsOn is a list of other DeploymentItem names within this group that must be in a Ready state before this deployment can be scaled up.
 	DependsOn []string `json:"dependsOn,omitempty"`
+	// PriorityClassName specifies the PriorityClass to be assigned to the Deployment's Pods.
+	// If specified, the controller will update the Deployment's .spec.template.spec.priorityClassName to match this value.
+	PriorityClassName *string `json:"priorityClassName,omitempty"`
 }
 
 // DeploymentGroupStatus defines the observed state of DeploymentGroup

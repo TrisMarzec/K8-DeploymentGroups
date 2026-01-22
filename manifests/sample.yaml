@@ -7,6 +7,7 @@ spec:
   items:
   - name: redis
     targetReplicas: 1
+    priorityClassName: high-priority
   - name: backend
     targetReplicas: 3
     dependsOn:

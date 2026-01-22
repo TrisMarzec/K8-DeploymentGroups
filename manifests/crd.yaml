@@ -44,6 +44,9 @@ spec:
                       type: array
                       items:
                         type: string
+                    priorityClassName:
+                      description: PriorityClassName specifies the priority class name for the deployment
+                      type: string
                   required:
                   - name
             required:

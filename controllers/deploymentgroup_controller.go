@@ -40,7 +40,8 @@ func (r *DeploymentGroupReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, err
 	}
 
-	// 0. Validate Dependencies (Cycle Detection)
+	// Validate that there are no circular dependencies in the DeploymentGroup items.
+	// If a cycle is detected, we cannot safely proceed with deployment ordering.
 	if err := r.checkForCycles(deploymentGroup.Spec.Items); err != nil {
 		log.Error(err, "Cycle detected in deployment dependencies")
 		// Update status to CycleDetected
@@ -48,17 +49,15 @@ func (r *DeploymentGroupReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, nil // Stop processing
 	}
 
-	// 1. Build a map of items and their current state
-	// Map: Name -> DeploymentItem
+	// Create a lookup map for easier access to DeploymentItems by name.
 	itemsMap := make(map[string]v1alpha1.DeploymentItem)
 	for _, item := range deploymentGroup.Spec.Items {
 		itemsMap[item.Name] = item
 	}
 
-	// 2. Fetch all deployments and determine their readiness
-	// Map: Name -> isReady
+	// Fetch all referenced Deployments and determine their current readiness.
+	// We track readiness based on available replicas matching the desired target.
 	readyStatus := make(map[string]bool)
-	// Map: Name -> current deployment object
 	deployments := make(map[string]*appsv1.Deployment)
 
 	for _, item := range deploymentGroup.Spec.Items {
@@ -85,7 +84,8 @@ func (r *DeploymentGroupReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		readyStatus[item.Name] = isReady
 	}
 
-	// 3. Enact state
+	// Determine the desired state for each deployment based on dependency status.
+	// If all dependencies are met, we scale up to TargetReplicas. Otherwise, we keep it scaled down.
 	var newReadyItems []string
 
 	for _, item := range deploymentGroup.Spec.Items {
@@ -126,17 +126,13 @@ func (r *DeploymentGroupReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 	}
 
-	// 4. Update Status
+	// Update the DeploymentGroup status with the list of currently ready items.
 	deploymentGroup.Status.ReadyItems = newReadyItems
-	// TODO: Set Conditions
 	if err := r.Status().Update(ctx, &deploymentGroup); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	// If we made updates or are waiting for things to become ready, we should reconcile again?
-	// The standard watch on Deployments should trigger us if we own them or if we set up a watcher.
-	// We will need to setup the specific Controller Builder to watch Deployments.
-
+	// Requeue to periodically check for status changes, as we are not explicitly watching all Deployments.
 	return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 }
 
@@ -182,9 +178,7 @@ func (r *DeploymentGroupReconciler) checkForCycles(items []v1alpha1.DeploymentIt
 func (r *DeploymentGroupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.DeploymentGroup{}).
-		// TODO: specific watch for deployments mentioned in groups?
-		// For simplicity, we can watch all Deployments, or rely on polling (RequeueAfter) + ownerRefs if we added them.
-		// Since we don't own the Deployments (they might exist independently), a general Watch + Filter is better.
-		// But for MVP, RequeueAfter 10s is safe fallback.
+		// We watch all Deployments via a polling mechanism (RequeueAfter) in the Reconcile loop.
+		// A more advanced implementation could watch Deployments and use event filters or OwnerReferences.
 		Complete(r)
 }
